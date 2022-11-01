@@ -295,7 +295,7 @@ class ImageLogger(Callback):
         self.batch_freq = batch_frequency
         self.max_images = max_images
         self.logger_log_images = {
-            pl.loggers.TestTubeLogger: self._testtube,
+            pl.loggers.TensorBoardLogger: self._testtube,
         }
         self.log_steps = [2 ** n for n in range(int(np.log2(self.batch_freq)) + 1)]
         if not increase_log_steps:
@@ -518,11 +518,11 @@ if __name__ == "__main__":
         # merge trainer cli with config
         trainer_config = lightning_config.get("trainer", OmegaConf.create())
         # default to ddp
-        trainer_config["accelerator"] = "ddp"
+        trainer_config["strategy"] = "ddp"
         for k in nondefault_trainer_args(opt):
             trainer_config[k] = getattr(opt, k)
         if not "gpus" in trainer_config:
-            del trainer_config["accelerator"]
+            del trainer_config["strategy"]
             cpu = True
         else:
             gpuinfo = trainer_config["gpus"]
@@ -549,7 +549,7 @@ if __name__ == "__main__":
                 }
             },
             "testtube": {
-                "target": "pytorch_lightning.loggers.TestTubeLogger",
+                "target": "pytorch_lightning.loggers.TensorBoardLogger",
                 "params": {
                     "name": "testtube",
                     "save_dir": logdir,
@@ -656,7 +656,13 @@ if __name__ == "__main__":
 
         trainer_kwargs["callbacks"] = [instantiate_from_config(callbacks_cfg[k]) for k in callbacks_cfg]
 
-        trainer = Trainer.from_argparse_args(trainer_opt, **trainer_kwargs)
+        if hasattr(trainer_opt, 'resume_from_checkpoint'):
+            _tmp = trainer_opt.resume_from_checkpoint
+            del trainer_opt.resume_from_checkpoint
+            trainer = Trainer.from_argparse_args(trainer_opt, **trainer_kwargs)
+            trainer_opt.resume_from_checkpoint = _tmp
+        else:
+            trainer = Trainer.from_argparse_args(trainer_opt, **trainer_kwargs)
         trainer.logdir = logdir  ###
 
         # data
@@ -716,7 +722,10 @@ if __name__ == "__main__":
         # run
         if opt.train:
             try:
-                trainer.fit(model, data)
+                if hasattr(train_opt, 'resome_from_checkpoint'):
+                    trainer.fit(model, data, ckpt_path=trainer_opt.resume_from_checkpoint)
+                else:
+                    trainer.fit(model, data)
             except Exception:
                 melk()
                 raise

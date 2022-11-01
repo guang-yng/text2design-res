@@ -1,0 +1,6 @@
+/latent_diffusion.egg-info
+
+*.ckpt
+*.zip
+
+__pycache__/
