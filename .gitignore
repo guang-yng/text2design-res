@@ -3,4 +3,8 @@
 *.ckpt
 *.zip
 
+run.sh
 __pycache__/
+
+data/design_demo_38
+logs/*

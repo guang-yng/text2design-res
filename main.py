@@ -248,7 +248,7 @@ class SetupCallback(Callback):
         self.config = config
         self.lightning_config = lightning_config
 
-    def on_keyboard_interrupt(self, trainer, pl_module):
+    def on_exception(self, trainer, pl_module):
         if trainer.global_rank == 0:
             print("Summoning checkpoint.")
             ckpt_path = os.path.join(self.ckptdir, "last.ckpt")
@@ -380,7 +380,7 @@ class ImageLogger(Callback):
             return True
         return False
 
-    def on_train_batch_end(self, trainer, pl_module, outputs, batch, batch_idx, dataloader_idx):
+    def on_train_batch_end(self, trainer, pl_module, outputs, batch, batch_idx):
         if not self.disabled and (pl_module.global_step > 0 or self.log_first_step):
             self.log_img(pl_module, batch, batch_idx, split="train")
 
@@ -400,7 +400,7 @@ class CUDACallback(Callback):
         torch.cuda.synchronize(trainer.root_gpu)
         self.start_time = time.time()
 
-    def on_train_epoch_end(self, trainer, pl_module, outputs):
+    def on_train_epoch_end(self, trainer, pl_module):
         torch.cuda.synchronize(trainer.root_gpu)
         max_memory = torch.cuda.max_memory_allocated(trainer.root_gpu) / 2 ** 20
         epoch_time = time.time() - self.start_time
@@ -670,11 +670,11 @@ if __name__ == "__main__":
         # NOTE according to https://pytorch-lightning.readthedocs.io/en/latest/datamodules.html
         # calling these ourselves should not be necessary but it is.
         # lightning still takes care of proper multiprocessing though
-        data.prepare_data()
-        data.setup()
+        # data.prepare_data()
+        # data.setup()
         print("#### Data #####")
-        for k in data.datasets:
-            print(f"{k}, {data.datasets[k].__class__.__name__}, {len(data.datasets[k])}")
+        # for k in data.datasets:
+        #     print(f"{k}, {data.datasets[k].__class__.__name__}, {len(data.datasets[k])}")
 
         # configure learning rate
         bs, base_lr = config.data.params.batch_size, config.model.base_learning_rate
@@ -701,6 +701,7 @@ if __name__ == "__main__":
 
         # allow checkpointing via USR1
         def melk(*args, **kwargs):
+            print("melk in!")
             # run all checkpoint hooks
             if trainer.global_rank == 0:
                 print("Summoning checkpoint.")
@@ -722,7 +723,7 @@ if __name__ == "__main__":
         # run
         if opt.train:
             try:
-                if hasattr(train_opt, 'resome_from_checkpoint'):
+                if hasattr(trainer_opt, 'resume_from_checkpoint'):
                     trainer.fit(model, data, ckpt_path=trainer_opt.resume_from_checkpoint)
                 else:
                     trainer.fit(model, data)
