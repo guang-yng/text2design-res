@@ -1,136 +1,53 @@
-from torchvision.datasets.utils import download_url
-from ldm.util import instantiate_from_config
-import torch
-import os
-# todo ?
-# from google.colab import files
-# from IPython.display import Image as ipyimg
-# import ipywidgets as widgets
+import numpy as np
 from PIL import Image
-from numpy import asarray
-from einops import rearrange, repeat
-import torch, torchvision
-from ldm.models.diffusion.ddim import DDIMSampler
+from taming.models import vqgan
+import sys
+import torchvision, torch
+from einops import rearrange
+import os
+from torch.utils.data import Dataset, DataLoader
+from tqdm import tqdm
+from typing import Dict, List
+from notebook_helpers import get_model
 from ldm.util import ismap
+from ldm.models.diffusion.ddim import DDIMSampler
 import time
-from omegaconf import OmegaConf
 
+class SRData(Dataset):
+    def __init__(self, dest, dest_out) -> None:
+        super().__init__()
+        self.dest = dest
+        self.dest_out = dest_out
+        assert os.path.exists(dest)
+        self.file_list = [f for f in sorted(os.listdir(dest))]
+        if os.path.exists(dest_out):
+            for f in sorted(os.listdir(dest_out)):
+                self.file_list.remove(f)
+        else:
+            os.makedirs(dest_out)
 
-def download_models(mode):
-
-    if mode == "superresolution":
-        # this is the small bsr light model
-        url_conf = 'https://heibox.uni-heidelberg.de/f/31a76b13ea27482981b4/?dl=1'
-        url_ckpt = 'https://heibox.uni-heidelberg.de/f/578df07c8fc04ffbadf3/?dl=1'
-
-        path_conf = 'logs/diffusion/superresolution_bsr/configs/project.yaml'
-        path_ckpt = 'logs/diffusion/superresolution_bsr/checkpoints/last.ckpt'
-
-        download_url(url_conf, path_conf)
-        download_url(url_ckpt, path_ckpt)
-
-        path_conf = path_conf + '/?dl=1' # fix it
-        path_ckpt = path_ckpt + '/?dl=1' # fix it
-        return path_conf, path_ckpt
-
-    else:
-        raise NotImplementedError
-
-
-def load_model_from_config(config, ckpt):
-    print(f"Loading model from {ckpt}")
-    pl_sd = torch.load(ckpt, map_location="cpu")
-    global_step = pl_sd["global_step"]
-    sd = pl_sd["state_dict"]
-    model = instantiate_from_config(config.model)
-    m, u = model.load_state_dict(sd, strict=False)
-    model.cuda()
-    model.eval()
-    return {"model": model}, global_step
-
-
-def get_model(mode):
-    path_conf, path_ckpt = download_models(mode)
-    config = OmegaConf.load(path_conf)
-    model, step = load_model_from_config(config, path_ckpt)
-    return model
-
-
-def get_custom_cond(mode):
-    dest = "data/example_conditioning"
-
-    if mode == "superresolution":
-        uploaded_img = files.upload()
-        filename = next(iter(uploaded_img))
-        name, filetype = filename.split(".") # todo assumes just one dot in name !
-        os.rename(f"{filename}", f"{dest}/{mode}/custom_{name}.{filetype}")
-
-    elif mode == "text_conditional":
-        w = widgets.Text(value='A cake with cream!', disabled=True)
-        display(w)
-
-        with open(f"{dest}/{mode}/custom_{w.value[:20]}.txt", 'w') as f:
-            f.write(w.value)
-
-    elif mode == "class_conditional":
-        w = widgets.IntSlider(min=0, max=1000)
-        display(w)
-        with open(f"{dest}/{mode}/custom.txt", 'w') as f:
-            f.write(w.value)
-
-    else:
-        raise NotImplementedError(f"cond not implemented for mode{mode}")
-
-
-def get_cond_options(mode):
-    path = "data/example_conditioning"
-    path = os.path.join(path, mode)
-    onlyfiles = [f for f in sorted(os.listdir(path))]
-    return path, onlyfiles
-
-
-def select_cond_path(mode):
-    path = "data/example_conditioning"  # todo
-    path = os.path.join(path, mode)
-    onlyfiles = [f for f in sorted(os.listdir(path))]
-
-    selected = widgets.RadioButtons(
-        options=onlyfiles,
-        description='Select conditioning:',
-        disabled=False
-    )
-    display(selected)
-    selected_path = os.path.join(path, selected.value)
-    return selected_path
-
-
-def get_cond(mode, selected_path):
-    example = dict()
-    if mode == "superresolution":
+    def __len__(self) -> int:
+        return len(self.file_list)
+    
+    def __getitem__(self, index) -> Dict:
+        filename = os.path.join(self.dest, self.file_list[index])
+        example = dict()
         up_f = 4
-        visualize_cond_img(selected_path)
 
-        c = Image.open(selected_path)
-        c = torch.unsqueeze(torchvision.transforms.ToTensor()(c), 0)
-        c_up = torchvision.transforms.functional.resize(c, size=[up_f * c.shape[2], up_f * c.shape[3]], antialias=True)
-        c_up = rearrange(c_up, '1 c h w -> 1 h w c')
-        c = rearrange(c, '1 c h w -> 1 h w c')
+        c = Image.open(filename)
+        c = torchvision.transforms.ToTensor()(c)
+        c_up = torchvision.transforms.functional.resize(c, size=[up_f * c.shape[1], up_f * c.shape[2]])
+        c_up = rearrange(c_up, 'c h w -> h w c')
+        c = rearrange(c, 'c h w -> h w c')
         c = 2. * c - 1.
 
         c = c.to(torch.device("cuda"))
         example["LR_image"] = c
         example["image"] = c_up
+        example["out_dir"] = os.path.join(self.dest_out, self.file_list[index])
+        return example
 
-    return example
-
-
-def visualize_cond_img(path):
-    display(ipyimg(filename=path))
-
-
-def run(model, selected_path, task, custom_steps, resize_enabled=False, classifier_ckpt=None, global_step=None):
-
-    example = get_cond(task, selected_path)
+def run(model, example, task, custom_steps, resize_enabled=False, classifier_ckpt=None, global_step=None):
 
     save_intermediate_vid = False
     n_runs = 1
@@ -268,3 +185,33 @@ def make_convolutional_sample(batch, model, mode="vanilla", custom_steps=None, e
     log["time"] = t1 - t0
 
     return log
+
+def save_images(batch, out_dir) -> None:
+    batch = torch.clamp(batch, -1.0, 1.0)
+    batch = (batch + 1.0) / 2.0 * 255
+    batch = batch.detach().cpu()
+    batch = batch.numpy().astype(np.uint8)
+    batch = np.transpose(batch, (0, 2, 3, 1))
+    for sample, dir in zip(batch, out_dir):
+        Image.fromarray(sample).save(dir)
+
+if __name__ == "__main__":
+    if len(sys.argv) == 1:
+        dirs = [""]
+    else:
+        dirs = sys.argv[1:]
+
+    mode = "superresolution"
+
+    model = get_model(mode)
+
+    dest = f"data/example_conditioning/{mode}"
+
+    for cur_dir in dirs:
+        dataset = SRData(os.path.join(dest, cur_dir), os.path.join(dest, cur_dir+'_output'))
+        dataloader = DataLoader(dataset, batch_size=6, shuffle=False)
+        for batch in tqdm(dataloader):
+            custom_steps = 100
+            logs = run(model['model'], batch, mode, custom_steps)
+            img_lst = save_images(logs['sample'], batch['out_dir'])
+    
