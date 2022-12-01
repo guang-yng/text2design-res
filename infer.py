@@ -203,7 +203,9 @@ if __name__ == "__main__":
 
     mode = "superresolution"
 
-    model = get_model(mode)
+    log_dir = "logs/2022-11-24T03-19-27_design_all_1122-ldm-sr"
+
+    model = get_model(mode, os.path.join(log_dir, "configs/2022-11-24T03-19-27-project.yaml"), os.path.join(log_dir, "checkpoints/epoch=000861.ckpt"))
 
     dest = f"data/example_conditioning/{mode}"
 

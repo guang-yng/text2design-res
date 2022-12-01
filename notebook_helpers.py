@@ -49,8 +49,10 @@ def load_model_from_config(config, ckpt):
     return {"model": model}, global_step
 
 
-def get_model(mode):
-    path_conf, path_ckpt = download_models(mode)
+def get_model(mode, path_conf = None, path_ckpt = None):
+    if path_conf is None or path_ckpt is None:
+        path_conf, path_ckpt = download_models(mode)
+
     config = OmegaConf.load(path_conf)
     model, step = load_model_from_config(config, path_ckpt)
     return model

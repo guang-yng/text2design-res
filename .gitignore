@@ -6,7 +6,7 @@
 run.sh
 __pycache__/
 
-data/design_demo_38
+data/design*
 data/example_conditioning/superresolution/*
 logs/*
 src/
