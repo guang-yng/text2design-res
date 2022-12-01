@@ -9,14 +9,14 @@ model:
     loss_type: l2
     first_stage_key: image
     cond_stage_key: LR_image
-    image_size: 256
+    image_size: 64 
     channels: 3
     concat_mode: true
     cond_stage_trainable: false
     unet_config:
       target: ldm.modules.diffusionmodules.openaimodel.UNetModel
       params:
-        image_size: 256
+        image_size: 64 # dummy for UNetModel
         in_channels: 6
         out_channels: 3
         model_channels: 160
@@ -31,15 +31,15 @@ model:
         - 4
         num_head_channels: 32
     first_stage_config:
-      target: ldm.models.autoencoder.AutoencoderKL
+      target: ldm.models.autoencoder.VQModelInterface
       params:
         embed_dim: 3
+        n_embed: 8192
         monitor: val/rec_loss
-        ckpt_path: models/first_stage_models/kl-f4/model.ckpt
         ddconfig:
-          double_z: true
+          double_z: false
           z_channels: 3
-          resolution: 1024
+          resolution: 256 # only used when attn_resolution specified
           in_channels: 3
           out_ch: 3
           ch: 128
@@ -51,38 +51,42 @@ model:
           attn_resolutions: []
           dropout: 0.0
         lossconfig:
-          target: ldm.modules.losses.LPIPSWithDiscriminator
-          params:
-            disc_start: 50001
-            kl_weight: 1.0e-06
-            disc_weight: 0.5
+          target: torch.nn.Identity
     cond_stage_config:
       target: torch.nn.Identity
 data:
   target: main.DataModuleFromConfig
   params:
-    batch_size: 1
+    batch_size: 4
     wrap: false
-    num_workers: 2
+    num_workers: 12
     train:
       target: ldm.data.design.SuperresDesignDemoTrain
       params:
-        size: 1024
+        size: 256
+        degradation: bsrgan_light
         downscale_f: 4
+        min_crop_f: 0.5
+        max_crop_f: 1.0
+        random_crop: true
     validation:
       target: ldm.data.design.SuperresDesignDemoValidation
       params:
-        size: 1024
+        size: 256
+        degradation: bsrgan_light
         downscale_f: 4
+        min_crop_f: 0.5
+        max_crop_f: 1.0
+        random_crop: true
 
-lightning:
-  callbacks:
-    image_logger:
-      target: main.ImageLogger
-      params:
-        batch_frequency: 5000
-        max_images: 8
-        increase_log_steps: False
-
-  trainer:
-    benchmark: True
+# lightning:
+#   callbacks:
+#     image_logger:
+#       target: main.ImageLogger
+#       params:
+#         batch_frequency: 5000
+#         max_images: 8
+#         increase_log_steps: False
+# 
+#   trainer:
+#     benchmark: True
