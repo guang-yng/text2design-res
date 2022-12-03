@@ -6,6 +6,14 @@ import random
 from ldm.modules.image_degradation.bsrgan_light import bicubic_degradation
 from PIL import ImageFile
 
+def add_margin(pil_img, top, right, bottom, left, color):
+    width, height = pil_img.size
+    new_width = width + right + left
+    new_height = height + top + bottom
+    result = Image.new(pil_img.mode, (new_width, new_height), color)
+    result.paste(pil_img, (left, top))
+    return result
+
 class Design(Dataset):
     def __init__(self, data_dir, size, downscale_f=4, degradation="bsrgan_light", min_crop_f=0.5, max_crop_f=1.0, random_crop=True):
         self.degradation = {"bsrgan_light": bicubic_degradation,
@@ -28,6 +36,15 @@ class Design(Dataset):
             original_img = original_img.convert('RGB')
 
         h, w = original_img.size
+        v_pad, h_pad = 0, 0
+        if h < self.size:
+            v_pad = self.size - h
+        if w < self.size:
+            h_pad = self.size - w
+        original_img = add_margin(original_img, v_pad>>1, h_pad>>1, (v_pad+1)>>1, (h_pad+1)>>1, (0, 0, 0))
+        h += v_pad
+        w += h_pad
+
         assert h >= self.size and w >= self.size
 
         upper = random.randint(0, h-self.size)
@@ -42,6 +59,35 @@ class Design(Dataset):
         example['LR_image'] = lr_img
 
         return example
+
+class DesignTrain(Design):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.data_len = int(0.8*len(self.data))
+
+    def __len__(self):
+        return self.data_len
+
+    def __getitem__(self, i):
+        if i >= self.data_len:
+            raise ValueError
+        return super().__getitem__(i)
+
+
+class DesignValid(Design):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.data_st = int(0.8*len(self.data))
+        self.data_len = len(self.data) - self.data_st
+
+    def __len__(self):
+        return self.data_len
+
+    def __getitem__(self, i):
+        if i >= self.data_len:
+            raise ValueError
+        return super().__getitem__(i + self.data_st)
+
 
 class SuperresDesignDemoTrain(Design):
     def __init__(self, **kwargs):
