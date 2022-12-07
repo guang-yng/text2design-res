@@ -16,6 +16,7 @@ def add_margin(pil_img, top, right, bottom, left, color):
 
 class Design(Dataset):
     def __init__(self, data_dir, size, downscale_f=4, degradation="bsrgan_light", min_crop_f=0.5, max_crop_f=1.0, random_crop=True):
+        ImageFile.LOAD_TRUNCATED_IMAGES = True
         self.degradation = {"bsrgan_light": bicubic_degradation,
                               "bilinear": Image.BILINEAR,
                               "bicubic": Image.BICUBIC,
