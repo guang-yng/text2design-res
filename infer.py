@@ -35,7 +35,11 @@ class SRData(Dataset):
         up_f = 4
 
         c = Image.open(filename)
+        if c.mode != "RGB":
+            c = c.convert("RGB")
         c = torchvision.transforms.ToTensor()(c)
+        if c.shape != (3, 512, 512):
+            print("Warning: Expected image shape (512, 512), get ", c.shape)
         c_up = torchvision.transforms.functional.resize(c, size=[up_f * c.shape[1], up_f * c.shape[2]])
         c_up = rearrange(c_up, 'c h w -> h w c')
         c = rearrange(c, 'c h w -> h w c')
@@ -196,24 +200,33 @@ def save_images(batch, out_dir) -> None:
         Image.fromarray(sample).save(dir)
 
 if __name__ == "__main__":
-    if len(sys.argv) == 1:
-        dirs = [""]
+    argc = len(sys.argv)
+    if argc <= 2:
+        print("Usage: python infer.py model_log_dir [checkpoint_name] [dirs to process]")
     else:
-        dirs = sys.argv[1:]
+        model_log_dir = sys.argv[1]
+        checkpoint_name = sys.argv[2] if argc >= 3 else "last.ckpt"
+        dirs = sys.argv[3:] if argc >= 4 else os.listdir('./data/example_conditioning/superresolution')
 
     mode = "superresolution"
 
-    log_dir = "logs/2022-11-24T03-19-27_design_all_1122-ldm-sr"
+    log_dir = f"logs/{model_log_dir}"
 
-    model = get_model(mode, os.path.join(log_dir, "configs/2022-11-24T03-19-27-project.yaml"), os.path.join(log_dir, "checkpoints/epoch=000861.ckpt"))
+    model = get_model(mode, os.path.join(log_dir, f"configs/{model_log_dir}-project.yaml"), os.path.join(log_dir, f"checkpoints/{checkpoint_name}"))
 
     dest = f"data/example_conditioning/{mode}"
 
     for cur_dir in dirs:
-        dataset = SRData(os.path.join(dest, cur_dir), os.path.join(dest, cur_dir+'_output'))
-        dataloader = DataLoader(dataset, batch_size=6, shuffle=False)
+        if cur_dir.endswith('output') or not os.path.isdir(os.path.join(dest, cur_dir)):
+            continue
+
+        print(f">>>>>>>Processing directory {cur_dir}>>>>>>>>")
+        dataset = SRData(os.path.join(dest, cur_dir), os.path.join(dest, cur_dir+f'{model_log_dir}_{checkpoint_name}_output'))
+        dataloader = DataLoader(dataset, batch_size=1, shuffle=False)
         for batch in tqdm(dataloader):
             custom_steps = 100
             logs = run(model['model'], batch, mode, custom_steps)
             img_lst = save_images(logs['sample'], batch['out_dir'])
+        
+        print(f"<<<<<<<<Finish Processing directory {cur_dir}<<<<<<")
     

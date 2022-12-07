@@ -4,6 +4,7 @@
 *.zip
 
 run.sh
+infer2.sh
 __pycache__/
 
 data/design*
