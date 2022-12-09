@@ -58,13 +58,13 @@ model:
 data:
   target: main.DataModuleFromConfig
   params:
-    batch_size: 128
+    batch_size: 64
     wrap: false
     num_workers: 12
     train:
       target: ldm.data.design.DesignTrain
       params:
-        data_dir: data/design_all_1130_17w
+        data_dir: data/design_1208_super_13w
         size: 256
         degradation: bsrgan_light
         downscale_f: 4
@@ -74,13 +74,13 @@ data:
     validation:
       target: ldm.data.design.DesignValid
       params:
-        data_dir: data/design_all_1130_17w
+        data_dir: data/design_1208_super_13w
         size: 256
         degradation: bsrgan_light
         downscale_f: 4
         min_crop_f: 0.5
         max_crop_f: 1.0
-        random_crop: false
+        random_crop: true
 
 lightning:
   callbacks:

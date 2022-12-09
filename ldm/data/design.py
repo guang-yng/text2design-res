@@ -25,6 +25,7 @@ class Design(Dataset):
         self.df = downscale_f
         self.size = size
         self.lr_size = int(size / downscale_f)
+        self.random_crop = random_crop
         self.data = load_from_disk(data_dir)
     
     def __len__(self):
@@ -36,20 +37,26 @@ class Design(Dataset):
         if original_img.mode != 'RGB':
             original_img = original_img.convert('RGB')
 
-        h, w = original_img.size
+
+        w, h = original_img.size
         v_pad, h_pad = 0, 0
         if h < self.size:
             v_pad = self.size - h
         if w < self.size:
             h_pad = self.size - w
         original_img = add_margin(original_img, v_pad>>1, h_pad>>1, (v_pad+1)>>1, (h_pad+1)>>1, (0, 0, 0))
+
         h += v_pad
         w += h_pad
 
         assert h >= self.size and w >= self.size
 
-        upper = random.randint(0, h-self.size)
-        left = random.randint(0, w-self.size)
+        if self.random_crop:
+            upper = random.randint(0, h-self.size)
+            left = random.randint(0, w-self.size)
+        else:
+            upper = (h-self.size)>>1 
+            left = (w-self.size)>>1 
         img = original_img.crop((left, upper, left+self.size, upper+self.size))
 
         img = np.array(img).astype(np.uint8)
