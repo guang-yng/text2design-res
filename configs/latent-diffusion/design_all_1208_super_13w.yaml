@@ -58,7 +58,7 @@ model:
 data:
   target: main.DataModuleFromConfig
   params:
-    batch_size: 64
+    batch_size: 16
     wrap: false
     num_workers: 12
     train:
@@ -88,8 +88,9 @@ lightning:
       target: main.ImageLogger
       params:
         max_images: 8
-#        increase_log_steps: False
+        batch_frequency: 100
+        increase_log_steps: False
 
   trainer:
-    max_epochs: 100
+    max_epochs: 150
 #     benchmark: True

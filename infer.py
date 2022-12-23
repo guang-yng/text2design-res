@@ -202,17 +202,19 @@ def save_images(batch, out_dir) -> None:
 if __name__ == "__main__":
     argc = len(sys.argv)
     if argc <= 2:
-        print("Usage: python infer.py model_log_dir [checkpoint_name] [dirs to process]")
+        print("Usage: python infer.py model_log_dir config_name [checkpoint_name] [dirs to process]")
     else:
         model_log_dir = sys.argv[1]
-        checkpoint_name = sys.argv[2] if argc >= 3 else "last.ckpt"
-        dirs = sys.argv[3:] if argc >= 4 else os.listdir('./data/example_conditioning/superresolution')
+        config_name = sys.argv[2]
+        checkpoint_name = sys.argv[3] if argc >= 4 else "last.ckpt"
+
+        dirs = sys.argv[4:] if argc >= 5 else os.listdir('./data/example_conditioning/superresolution')
 
     mode = "superresolution"
 
     log_dir = f"logs/{model_log_dir}"
 
-    model = get_model(mode, os.path.join(log_dir, f"configs/{model_log_dir}-project.yaml"), os.path.join(log_dir, f"checkpoints/{checkpoint_name}"))
+    model = get_model(mode, os.path.join(log_dir, f"configs/{config_name}-project.yaml"), os.path.join(log_dir, f"checkpoints/{checkpoint_name}"))
 
     dest = f"data/example_conditioning/{mode}"
 
