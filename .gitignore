@@ -12,6 +12,7 @@ data/example_conditioning/superresolution/*
 data/debug
 data/compare
 data/inpainting_epoch2
+data/tmp.py
 logs/*
 src/
 outputs/*

@@ -12,6 +12,7 @@ from notebook_helpers import get_model
 from ldm.util import ismap
 from ldm.models.diffusion.ddim import DDIMSampler
 import time
+import argparse
 
 class SRData(Dataset):
     def __init__(self, dest, dest_out) -> None:
@@ -200,21 +201,27 @@ def save_images(batch, out_dir) -> None:
         Image.fromarray(sample).save(dir)
 
 if __name__ == "__main__":
-    argc = len(sys.argv)
-    if argc <= 2:
-        print("Usage: python infer.py model_log_dir config_name [checkpoint_name] [dirs to process]")
-    else:
-        model_log_dir = sys.argv[1]
-        config_name = sys.argv[2]
-        checkpoint_name = sys.argv[3] if argc >= 4 else "last.ckpt"
+    parser = argparse.ArgumentParser()
+    #parser.add_argument("--local_rank", type=int)
+    parser.add_argument("--model_log_dir", type=str)
+    parser.add_argument("--config_name", type=str)
+    parser.add_argument("--ckpt_name", type=str, default="last.ckpt")
+    parser.add_argument("--dirs", nargs="+", type=str, default="last.ckpt")
+    args = parser.parse_args()
+    model_log_dir = args.model_log_dir
+    config_name = args.config_name
+    checkpoint_name = args.ckpt_name
+    #torch.cuda.set_device(args.local_rank)
 
-        dirs = sys.argv[4:] if argc >= 5 else os.listdir('./data/example_conditioning/superresolution')
+    dirs = args.dirs
 
     mode = "superresolution"
 
     log_dir = f"logs/{model_log_dir}"
 
+    #torch.distributed.init_process_group(backend="nccl", init_method='env://')
     model = get_model(mode, os.path.join(log_dir, f"configs/{config_name}-project.yaml"), os.path.join(log_dir, f"checkpoints/{checkpoint_name}"))
+    #model['model'] = torch.nn.parallel.DistributedDataParallel(model['model'], device_ids=[args.local_rank])
 
     dest = f"data/example_conditioning/{mode}"
 
@@ -224,7 +231,7 @@ if __name__ == "__main__":
 
         print(f">>>>>>>Processing directory {cur_dir}>>>>>>>>")
         dataset = SRData(os.path.join(dest, cur_dir), os.path.join(dest, cur_dir+f'{model_log_dir}_{checkpoint_name}_output'))
-        dataloader = DataLoader(dataset, batch_size=1, shuffle=False)
+        dataloader = DataLoader(dataset, batch_size=4, shuffle=False)
         for batch in tqdm(dataloader):
             custom_steps = 100
             logs = run(model['model'], batch, mode, custom_steps)
